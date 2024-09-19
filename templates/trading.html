@@ -259,10 +259,10 @@
 
     function openStockDetail(symbol) {
         // Check if user is authenticated
-        {% if not current_user.is_authenticated %}
+        if (!current_user.is_authenticated) {
             window.location.href = '/login';
             return;
-        {% endif %}
+        }
 
         fetch(`/stock_detail/${symbol}`)
             .then(response => response.json())

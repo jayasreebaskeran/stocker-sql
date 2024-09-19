@@ -5,13 +5,18 @@ import requests
 import os
 from datetime import datetime
 from werkzeug.security import check_password_hash, generate_password_hash
-from flask_migrate import Migrate
 import random
 
 app = Flask(__name__)
 
+# Load environment variables
+DB_USER = os.environ.get("DB_USER")
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
+DB_HOST = os.environ.get("DB_HOST", "localhost")  # Default to localhost if not set
+
+
 # Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://admin:Ut2DBsHFM1JZEdEr8mvn@database-1.cp8osk6oad8n.ap-south-1.rds.amazonaws.com/stocker'  # Replace 'user', 'password', 'localhost', and 'db_name' with your actual MySQL credentials and database name
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{os.environ.get("DB_USER")}:{os.environ.get("DB_PASSWORD")}@{os.environ.get("DB_HOST", "localhost")}/stocker'  
 app.config['SECRET_KEY'] = 'your_secret_key_here'  # Replace with a real secret key
 ALPHA_VANTAGE_API_KEY = os.environ.get('ALPHA_VANTAGE_API_KEY', '4QITL9CQJ51G81D2')
 
@@ -45,6 +50,24 @@ class Transaction(db.Model):
 
     def __repr__(self):
         return f'<Transaction {self.id}: {self.action} {self.shares} shares of {self.symbol}>'
+
+class StockTransactionHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    symbol = db.Column(db.String(10), nullable=False)
+    shares = db.Column(db.Integer, nullable=False)
+    action = db.Column(db.String(4), nullable=False)  # 'buy' or 'sell'
+    price = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class TransactionHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    transaction_type = db.Column(db.String(10), nullable=False)  # 'deposit' or 'withdraw'
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 class StockPrice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -82,10 +105,13 @@ def get_stock_price(symbol):
 
 def update_portfolio(user_id, symbol, shares, action):
     user = User.query.get(user_id)
+    stock_price = get_stock_price(symbol)  # Fetch stock price here
+    if stock_price is None:  # Check if stock price retrieval failed
+        return 0
     if action == 'buy':
-        user.balance -= shares * get_stock_price(symbol)
+        user.balance = current_user.balance
     elif action == 'sell':
-        user.balance += shares * get_stock_price(symbol)
+        user.balance = current_user.balance
         # Remove shares from the transaction records
         transaction = Transaction.query.filter_by(user_id=user_id, symbol=symbol, action='buy').first()
         if transaction:
@@ -170,7 +196,6 @@ def register():
         # Add more fields as necessary
         user = User.query.filter_by(username=username).first()
         if user:
-            print('user exists')
             flash('Username already exists', 'error')
         else:
             new_user = User(username=username, password=generate_password_hash(password))
@@ -207,7 +232,9 @@ def forgot_password():
 def portfolio():
     user_balance = current_user.balance
     user_stocks = Transaction.query.filter_by(user_id=current_user.id, action='buy').all()
-    return render_template('portfolio.html', user_balance=user_balance, user_stocks=user_stocks)
+    transaction_history = TransactionHistory.query.filter_by(user_id=current_user.id).order_by(TransactionHistory.timestamp.desc()).all()
+    stock_transaction_history = StockTransactionHistory.query.filter_by(user_id=current_user.id).order_by(StockTransactionHistory.timestamp.desc()).all()
+    return render_template('portfolio.html', user_balance=user_balance, user_stocks=user_stocks, transaction_history=transaction_history, stock_transaction_history=stock_transaction_history)
 
 @app.errorhandler(404)
 def page_not_found(e):
@@ -222,14 +249,20 @@ def execute_trade():
     action = data['action']
     
     current_price = get_stock_price(symbol)
-    
+
+    if current_price is None:  # Check if stock price retrieval failed
+        return jsonify({'success': False, 'message': 'Unable to fetch stock price'})
+
     if action == 'buy':
         total_cost = shares * current_price
         if current_user.balance >= total_cost:
             current_user.balance -= total_cost
-            update_portfolio(current_user.id, symbol, shares, 'buy')
+            db.session.commit()  # Commit balance change before adding transaction
             transaction = Transaction(user_id=current_user.id, symbol=symbol, shares=shares, price=current_price, action='buy')
             db.session.add(transaction)
+            # Log the stock transaction
+            stock_transaction = StockTransactionHistory(user_id=current_user.id, symbol=symbol, shares=shares, action='buy', price=current_price)
+            db.session.add(stock_transaction)
             db.session.commit()
             return jsonify({'success': True, 'message': f'Successfully bought {shares} shares of {symbol}'})
         else:
@@ -238,15 +271,20 @@ def execute_trade():
         if has_enough_shares(current_user.id, symbol, shares):
             total_earnings = shares * current_price
             current_user.balance += total_earnings
+            db.session.commit()  # Commit balance change before adding transaction
             update_portfolio(current_user.id, symbol, shares, 'sell')
             transaction = Transaction(user_id=current_user.id, symbol=symbol, shares=shares, price=current_price, action='sell')
             db.session.add(transaction)
+            # Log the stock transaction
+            stock_transaction = StockTransactionHistory(user_id=current_user.id, symbol=symbol, shares=shares, action='sell', price=current_price)
+            db.session.add(stock_transaction)
             db.session.commit()
             return jsonify({'success': True, 'message': f'Successfully sold {shares} shares of {symbol}'})
         else:
             return jsonify({'success': False, 'message': 'Insufficient shares'})
     else:
         return jsonify({'success': False, 'message': 'Invalid action'})
+
 
 @app.route('/deposit_withdraw', methods=['POST'])
 @login_required
@@ -255,47 +293,68 @@ def deposit_withdraw():
         amount = float(request.form['amount'])
         transaction_type = request.form['transaction_type']
         if transaction_type == 'deposit':
-            current_user.balance += amount  # Update balance in the frontend
+            current_user.balance += amount
+            # Log the transaction
+            new_transaction = TransactionHistory(user_id=current_user.id, amount=amount, transaction_type='deposit')
+            db.session.add(new_transaction)
         elif transaction_type == 'withdraw':
             if current_user.balance >= amount:
-                current_user.balance -= amount  # Update balance in the frontend
+                current_user.balance -= amount
+                # Log the transaction
+                new_transaction = TransactionHistory(user_id=current_user.id, amount=amount, transaction_type='withdraw')
+                db.session.add(new_transaction)
             else:
                 flash('Insufficient funds for withdrawal', 'error')
                 return redirect(url_for('portfolio', user_balance=current_user.balance))
         
         db.session.commit()
-        
-        print(f'Successfully {transaction_type}ed ${amount:.2f}', 'success')
         return redirect(url_for('portfolio', user_balance=current_user.balance))
-    
-    return redirect(url_for('portfolio', user_balance=current_user.balance))
+
 
 @app.route('/trading')
 @login_required
 def trading():
     stocks = get_nasdaq_stocks()
-    print(stocks)
     return render_template('trading.html', stocks=stocks)
 
 @app.route('/stock_detail/<symbol>')
 @login_required
 def stock_detail(symbol):
     stock_price = get_stock_price(symbol)
+    existing_transaction = Transaction.query.filter_by(user_id=current_user.id, symbol=symbol, action='buy').first()
+    shares = 0
+    if existing_transaction:
+        shares = existing_transaction.shares
     stock_data = {
     "change": random.uniform(-0.05, 0.05),
     "change_percent": random.uniform(-0.05, 0.05),
     "price": stock_price,
     "symbol": symbol,
-    "volume": random.randint(1000, 100000)
+    "volume": random.randint(1000, 100000),
+    "shares" : shares
     }
     if stock_price:
         return render_template('stock_detail.html', stock_data=stock_data)
     else:
         return jsonify({"error": "Unable to fetch stock data"}), 400
+    
+@app.route('/logout_startup')
+def logout_startup():
+    if current_user.is_authenticated:
+        logout_user()  # Log out the user if they are logged in
+    return "User logged out if they were logged in."
+
+should_logout = True
+
+@app.before_request
+def before_request():
+    global should_logout
+    if should_logout and current_user.is_authenticated:
+        logout_user()  # Log out the user if they are logged in
+        should_logout = False  # Reset the flag after logging out
 
 if __name__ == '__main__':
-    create_tables()
+    create_tables()  # Create tables first
     app.run(host='0.0.0.0', port=5000)
-    # app.run(debug=True, use_reloader=False)
 
 
