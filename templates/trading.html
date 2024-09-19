@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Stocker - Trading</title>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="" name="keywords">
+    <meta content="" name="description">
+
+    <!-- Google Web Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet"> 
+
+    <!-- Icon Font Stylesheet -->
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.4/css/all.css"/>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.4.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- DataTables Stylesheet -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css">
+
+    <!-- Libraries Stylesheet -->
+    <link href="{{ url_for('static', filename='lib/animate/animate.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='lib/owlcarousel/assets/owl.carousel.min.css') }}" rel="stylesheet">
+
+    <!-- Customized Bootstrap Stylesheet -->
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+
+    <!-- Template Stylesheet -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
+</head>
+
+<body>
+    <!-- Spinner Start -->
+    <div id="spinner" class="show bg-white position-fixed translate-middle w-100 vh-100 top-50 start-50 d-flex align-items-center justify-content-center">
+        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
+    <!-- Spinner End -->
+
+    <!-- Navbar Start -->
+    <nav class="navbar navbar-expand-lg navbar-light px-4 px-lg-5 py-3 py-lg-0">
+        <a href="{{ url_for('index') }}" class="navbar-brand p-0">
+            <h1 class="text-primary"><i class="fas fa-search-dollar me-3"></i>Stocker</h1>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
+            <span class="fa fa-bars"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+            <div class="navbar-nav ms-auto py-0">
+                <a href="{{ url_for('index') }}" class="nav-item nav-link">Home</a>
+                <a href="/" class="nav-item nav-link">About</a>
+                <a href="/" class="nav-item nav-link">Contact</a>
+                {% if not current_user.is_authenticated %}
+                    <a href="/login" class="nav-item nav-link">Login</a>
+                    <a href="/register" class="nav-item nav-link">Register</a>
+                {% else %}
+                    <a href="{{ url_for('trading') }}" class="nav-item nav-link">Trading</a>
+                    <a href="{{ url_for('portfolio') }}" class="nav-item nav-link">Portfolio</a>
+                    <a href="{{ url_for('logout') }}" class="nav-item nav-link">Logout</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+    <!-- Navbar End -->
+
+    <!-- Header Start -->
+    <div class="container-fluid bg-primary py-5 mb-5 hero-header">
+        <div class="container py-5">
+            <div class="row justify-content-center py-5">
+                <div class="col-lg-10 pt-lg-5 mt-lg-5 text-center">
+                    <h1 class="display-3 text-white mb-3 animated slideInDown">Trading</h1>
+                    <p class="fs-4 text-white mb-4 animated slideInDown">Buy and sell NASDAQ stocks with real-time data</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Header End -->
+
+    <!-- Search Bar Start -->
+    <div class="container mb-4">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search for stocks...">
+    </div>
+    <!-- Search Bar End -->
+
+    <!-- Trading Section Start -->
+    <div class="container-xxl py-5">
+        <div class="container">
+            <div class="row g-5">
+                <div class="col-lg-12 wow fadeInUp" data-wow-delay="0.1s">
+                    <h2 class="mb-4">NASDAQ Stocks</h2>
+                    <div class="table-responsive">
+                        <table id="stockTable" class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Company Name</th>
+                                    <th>Price</th>
+                                    <th>Exchange</th>
+                                    <th>Asset Type</th>
+                                    <th>Status</th>
+                                    <th>View</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stockTableBody">
+                                {% for stock in stocks %}
+                                <tr>
+                                    <td>{{ stock.symbol }}</td>
+                                    <td>{{ stock.name }}</td>
+                                    <td>{{ stock.price }}</td>
+                                    <td>{{ stock.exchange }}</td>
+                                    <td>{{ stock.asset_type }}</td>
+                                    <td>{{ stock.status }}</td>
+                                    <td><a href="{{ url_for('stock_detail', symbol=stock.symbol) }}" class="btn btn-sm btn-primary">View</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <script>
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    const searchInput = document.getElementById('searchInput');
+                                    const stockTableBody = document.getElementById('stockTableBody');
+                                    searchInput.addEventListener('input', function() {
+                                        const searchValue = this.value.toLowerCase();
+                                        const rows = stockTableBody.rows;
+                                        for (let i = 0; i < rows.length; i++) {
+                                            const row = rows[i];
+                                            const symbol = row.cells[0].textContent.toLowerCase();
+                                            const name = row.cells[1].textContent.toLowerCase();
+                                            if (symbol.includes(searchValue) || name.includes(searchValue)) {
+                                                row.style.display = '';
+                                            } else {
+                                                row.style.display = 'none';
+                                            }
+                                        }
+                                    });
+                                });
+                            </script>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Trading Section End -->
+
+    <!-- Stock Detail Modal -->
+    <div class="modal fade" id="stockDetailModal" tabindex="-1" aria-labelledby="stockDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="stockDetailModalLabel">Stock Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <canvas id="stockChart"></canvas>
+                        </div>
+                        <div class="col-md-4">
+                            <h3 id="stockSymbol"></h3>
+                            <p id="stockPrice"></p>
+                            <p id="stockChange"></p>
+                            <p id="stockVolume"></p>
+                        </div>
+                    </div>
+                    <div class="row mt-4">
+                        <div class="col-md-12">
+                            <h4>Trade</h4>
+                            <form id="tradeForm">
+                                <div class="mb-3">
+                                    <label for="shares" class="form-label">Number of Shares</label>
+                                    <input type="number" class="form-control" id="shares" name="shares" required min="1">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="action" class="form-label">Action</label>
+                                    <select class="form-select" id="action" name="action" required>
+                                        <option value="buy">Buy</option>
+                                        <option value="sell">Sell</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Execute Trade</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Start -->
+    <div class="container-fluid footer py-5 wow fadeIn" data-wow-delay="0.2s">
+        <div class="container py-5">
+            <div class="row g-5">
+                <div class="col-md-6">
+                    <h1 class="text-white mb-4"><i class="fas fa-search-dollar me-3"></i>Stocker</h1>
+                    <p>Manage your portfolio with ease and stay updated on your investments.</p>
+                </div>
+                <div class="col-md-6">
+                    <h5 class="text-white mb-4">Newsletter</h5>
+                    <p>Stay updated with our latest investment opportunities and market insights.</p>
+                    <div class="position-relative">
+                        <input class="form-control bg-transparent w-100 py-3 ps-4 pe-5" type="text" placeholder="Your email">
+                        <button type="button" class="btn btn-primary py-2 px-3 position-absolute top-0 end-0 mt-2 me-2">SignUp</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Footer End -->
+
+    <!-- Copyright Start -->
+    <div class="container-fluid copyright py-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
+                    &copy; <a class="fw-medium" href="#">Stocker</a>, All Right Reserved.
+                </div>
+                <div class="col-md-6 text-center text-md-end">
+                    Designed By <a class="fw-medium" href="https://htmlcodex.com">HTML Codex</a>
+                    Distributed By <a class="fw-medium" href="https://themewagon.com">ThemeWagon</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Copyright End -->
+
+    <!-- Back to Top -->
+    <a href="#" class="btn btn-lg btn-primary btn-lg-square rounded-circle back-to-top"><i class="bi bi-arrow-up"></i></a>
+
+    <!-- JavaScript Libraries -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='lib/wow/wow.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='lib/easing/easing.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='lib/waypoints/waypoints.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='lib/owlcarousel/owl.carousel.min.js') }}"></script>
+
+    <!-- Template Javascript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <script>
+    $(document).ready(function() {
+        // Initialize DataTable
+        var table = $('#stockTable').DataTable();
+
+        // Search functionality
+        $('#searchInput').on('keyup', function() {
+            table.search(this.value).draw(); // Use DataTable's built-in search method
+        });
+    });
+
+    function openStockDetail(symbol) {
+        // Check if user is authenticated
+        {% if not current_user.is_authenticated %}
+            window.location.href = '/login';
+            return;
+        {% endif %}
+
+        fetch(`/stock_detail/${symbol}`)
+            .then(response => response.json())
+            .then(data => {
+                $('#stockDetailModalLabel').text(`${symbol} Details`);
+                $('#stockSymbol').text(symbol);
+                $('#stockPrice').text(`Price: $${data.price.toFixed(2)}`);
+                $('#stockChange').text(`Change: ${data.change_percent}`);
+                $('#stockVolume').text(`Volume: ${data.volume.toLocaleString()}`);
+                
+                // Clear previous chart data
+                clearChart();
+                updateChart(symbol, data);
+                $('#stockDetailModal').modal('show');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while fetching stock details.');
+            });
+    }
+
+    function clearChart() {
+        const ctx = document.getElementById('stockChart').getContext('2d');
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); // Clear the canvas
+    }
+
+    function updateChart(symbol, data) {
+        const ctx = document.getElementById('stockChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels, // Assuming you have labels in your data
+                datasets: [{
+                    label: symbol,
+                    data: data.prices, // Assuming you have price data
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: `${symbol} Stock Performance`
+                    }
+                }
+            }
+        });
+    }
+
+    // Handle form submission
+    document.getElementById('tradeForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const shares = document.getElementById('shares').value;
+        const action = document.getElementById('action').value;
+        const symbol = document.getElementById('stockSymbol').textContent;
+
+        // Send trade request to backend
+        fetch('/execute_trade', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                shares: shares,
+                action: action
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Trade executed successfully: ${action} ${shares} shares of ${symbol}`);
+            } else {
+                alert(`Trade failed: ${data.message}`);
+            }
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+            alert('An error occurred while processing your trade.');
+        });
+    });
+    </script>
+</body>
+
+</html>
