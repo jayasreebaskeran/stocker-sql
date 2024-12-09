@@ -83,7 +83,7 @@ class StockPrice(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
-        return f'<StockPrice {self.id}: {self.symbol} at ₹{self.price}>'
+        return f'<StockPrice {self.id}: {self.symbol} at ${self.price}>'
 
 # Helper functions
 @login_manager.user_loader
