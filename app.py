@@ -6,11 +6,11 @@ import os
 from datetime import datetime
 from werkzeug.security import check_password_hash, generate_password_hash
 import random
-
-app = Flask(__name__)
-import os
 from dotenv import load_dotenv
 
+app = Flask(__name__)
+
+# Load environment variables
 load_dotenv()
 
 # Load environment variables
@@ -32,8 +32,11 @@ login_manager.login_view = 'login'
 
 # Add this function to create tables
 def create_tables():
-    with app.app_context():
-        db.create_all()
+    try:
+        with app.app_context():
+            db.create_all()
+    except Exception as e:
+        print(f"Error while connecting to the database: {e}")
 
 # Models
 class User(UserMixin, db.Model):
@@ -268,8 +271,8 @@ def execute_trade():
             db.session.add(stock_transaction)
             db.session.commit()
             return jsonify({'success': True, 'message': f'Successfully bought {shares} shares of {symbol}'})
-        else:
-            return jsonify({'success': False, 'message': 'Insufficient funds'})
+
+
     elif action == 'sell':
         if has_enough_shares(current_user.id, symbol, shares):
             total_earnings = shares * current_price
@@ -283,81 +286,12 @@ def execute_trade():
             db.session.add(stock_transaction)
             db.session.commit()
             return jsonify({'success': True, 'message': f'Successfully sold {shares} shares of {symbol}'})
-        else:
-            return jsonify({'success': False, 'message': 'Insufficient shares'})
+
+
     else:
         return jsonify({'success': False, 'message': 'Invalid action'})
 
 
-@app.route('/deposit_withdraw', methods=['POST'])
-@login_required
-def deposit_withdraw():
-    if request.method == 'POST':
-        amount = float(request.form['amount'])
-        transaction_type = request.form['transaction_type']
-        if transaction_type == 'deposit':
-            current_user.balance += amount
-            # Log the transaction
-            new_transaction = TransactionHistory(user_id=current_user.id, amount=amount, transaction_type='deposit')
-            db.session.add(new_transaction)
-        elif transaction_type == 'withdraw':
-            if current_user.balance >= amount:
-                current_user.balance -= amount
-                # Log the transaction
-                new_transaction = TransactionHistory(user_id=current_user.id, amount=amount, transaction_type='withdraw')
-                db.session.add(new_transaction)
-            else:
-                flash('Insufficient funds for withdrawal', 'error')
-                return redirect(url_for('portfolio', user_balance=current_user.balance))
-        
-        db.session.commit()
-        return redirect(url_for('portfolio', user_balance=current_user.balance))
-
-
-@app.route('/trading')
-@login_required
-def trading():
-    stocks = get_nasdaq_stocks()
-    return render_template('trading.html', stocks=stocks)
-
-@app.route('/stock_detail/<symbol>')
-@login_required
-def stock_detail(symbol):
-    stock_price = get_stock_price(symbol)
-    existing_transaction = Transaction.query.filter_by(user_id=current_user.id, symbol=symbol, action='buy').first()
-    shares = 0
-    if existing_transaction:
-        shares = existing_transaction.shares
-    stock_data = {
-    "change": random.uniform(-0.05, 0.05),
-    "change_percent": random.uniform(-0.05, 0.05),
-    "price": stock_price,
-    "symbol": symbol,
-    "volume": random.randint(1000, 100000),
-    "shares" : shares
-    }
-    if stock_price:
-        return render_template('stock_detail.html', stock_data=stock_data)
-    else:
-        return jsonify({"error": "Unable to fetch stock data"}), 400
-    
-@app.route('/logout_startup')
-def logout_startup():
-    if current_user.is_authenticated:
-        logout_user()  # Log out the user if they are logged in
-    return "User logged out if they were logged in."
-
-should_logout = True
-
-@app.before_request
-def before_request():
-    global should_logout
-    if should_logout and current_user.is_authenticated:
-        logout_user()  # Log out the user if they are logged in
-        should_logout = False  # Reset the flag after logging out
-
 if __name__ == '__main__':
-    create_tables()  # Create tables first
-    app.run(host='0.0.0.0', port=5000)
-
-
+    create_tables()  # Call create_tables when the app starts
+    app.run(debug=True)
