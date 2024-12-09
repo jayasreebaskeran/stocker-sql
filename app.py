@@ -15,7 +15,7 @@ load_dotenv()
 
 # Load environment variables
 DB_USER = os.environ.get("DB_USER", "admin")  # Default to "admin" if DB_USER is not set
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "Jaya1711")  # Default to "RamyaRani2005" if not set
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "Mega2203")  # Default to "RamyaRani2005" if not set
 DB_HOST = os.environ.get("DB_HOST", "localhost")  # Default to "localhost" if not set
 DB_NAME = os.environ.get("DB_NAME", "stocker")  # Default to "stocker" if not set
 ALPHA_VANTAGE_API_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "4QITL9CQJ51G81D2")  # Default API key
